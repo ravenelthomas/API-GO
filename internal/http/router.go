@@ -1,32 +1,44 @@
 package http
 
-import "github.com/gin-gonic/gin"
+import (
+	"api-go/internal/middleware"
+
+	"github.com/gin-gonic/gin"
+)
 
 func NewRouter(h *Handler) *gin.Engine {
 	r := gin.Default()
 
+	// Public routes
 	r.GET("/health", h.Health)
+	r.POST("/auth/register", h.Register)
+	r.POST("/auth/login", h.Login)
 
-	r.POST("/servers", h.CreateServer)
-	r.GET("/servers", h.ListServers)
-	r.GET("/servers/:id", h.GetServer)
+	// Protected routes
+	protected := r.Group("/")
+	protected.Use(middleware.AuthMiddleware())
+	{
+		protected.POST("/servers", h.CreateServer)
+		protected.GET("/servers", h.ListServers)
+		protected.GET("/servers/:id", h.GetServer)
 
-	r.POST("/images/pull", h.PullImage)
-	r.POST("/images/build", h.BuildImage)
+		protected.POST("/images/pull", h.PullImage)
+		protected.POST("/images/build", h.BuildImage)
 
-	r.POST("/projects", h.CreateProject)
-	r.GET("/projects", h.ListProjects)
-	r.GET("/projects/:id", h.GetProject)
-	r.POST("/projects/:id/services", h.AddServiceToProject)
-	r.POST("/projects/:id/networks", h.AddProjectNetwork)
-	r.POST("/projects/:id/secrets", h.AddProjectSecret)
-	r.POST("/projects/:id/labels", h.AddProjectLabel)
-	r.POST("/projects/:id/deployments", h.DeployProject)
+		protected.POST("/projects", h.CreateProject)
+		protected.GET("/projects", h.ListProjects)
+		protected.GET("/projects/:id", h.GetProject)
+		protected.POST("/projects/:id/services", h.AddServiceToProject)
+		protected.POST("/projects/:id/networks", h.AddProjectNetwork)
+		protected.POST("/projects/:id/secrets", h.AddProjectSecret)
+		protected.POST("/projects/:id/labels", h.AddProjectLabel)
+		protected.POST("/projects/:id/deployments", h.DeployProject)
 
-	r.GET("/deployments", h.ListDeployments)
-	r.GET("/deployments/:id", h.GetDeployment)
-	r.GET("/deployments/:id/status", h.GetDeploymentStatus)
-	r.POST("/deployments/:id/scale", h.ScaleDeployment)
+		protected.GET("/deployments", h.ListDeployments)
+		protected.GET("/deployments/:id", h.GetDeployment)
+		protected.GET("/deployments/:id/status", h.GetDeploymentStatus)
+		protected.POST("/deployments/:id/scale", h.ScaleDeployment)
+	}
 
 	return r
 }

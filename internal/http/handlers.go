@@ -9,10 +9,12 @@ import (
 	"strings"
 
 	dockerclient "api-go/internal/docker"
+	"api-go/internal/middleware"
 	"api-go/internal/models"
 	"api-go/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -405,4 +407,78 @@ func (h *Handler) resolveTargetServer(serverID uint) (models.Server, error) {
 		return server, fmt.Errorf("no server configured")
 	}
 	return server, nil
+}
+
+func (h *Handler) Register(c *gin.Context) {
+	type reqBody struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	var body reqBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(body.Username) == "" || strings.TrimSpace(body.Password) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+
+	user := models.User{
+		Username: body.Username,
+		Password: string(hashedPassword),
+	}
+	if err := h.db.Create(&user).Error; err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+		return
+	}
+
+	token, err := middleware.GenerateToken(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"token": token, "user_id": user.ID})
+}
+
+func (h *Handler) Login(c *gin.Context) {
+	type reqBody struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	var body reqBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(body.Username) == "" || strings.TrimSpace(body.Password) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
+		return
+	}
+
+	var user models.User
+	if err := h.db.Where("username = ?", body.Username).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		return
+	}
+
+	token, err := middleware.GenerateToken(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"token": token, "user_id": user.ID})
 }

@@ -83,3 +83,10 @@ type ProjectLabel struct {
 	Value     string `json:"value"`
 	CreatedAt time.Time
 }
+
+type User struct {
+	ID        uint   `json:"id" gorm:"primaryKey"`
+	Username  string `json:"username" gorm:"uniqueIndex"`
+	Password  string `json:"-"` // Never return password in JSON
+	CreatedAt time.Time
+}
