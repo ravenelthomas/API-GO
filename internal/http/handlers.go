@@ -434,8 +434,17 @@ func (h *Handler) Register(c *gin.Context) {
 		Username: body.Username,
 		Password: string(hashedPassword),
 	}
+	
+	// Create users table if it doesn't exist (workaround for migration issue)
+	if !h.db.Migrator().HasTable(&models.User{}) {
+		if err := h.db.Migrator().CreateTable(&models.User{}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create users table: " + err.Error()})
+			return
+		}
+	}
+	
 	if err := h.db.Create(&user).Error; err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

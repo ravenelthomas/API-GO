@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -20,6 +21,12 @@ func NewSQLite(dbPath string) (*gorm.DB, error) {
 		return nil, err
 	}
 
+	// Migrate User first to ensure it exists
+	if err := db.AutoMigrate(&models.User{}); err != nil {
+		return nil, err
+	}
+	fmt.Println("Users table migrated successfully")
+
 	if err := db.AutoMigrate(
 		&models.Server{},
 		&models.Project{},
@@ -32,6 +39,8 @@ func NewSQLite(dbPath string) (*gorm.DB, error) {
 	); err != nil {
 		return nil, err
 	}
+	
+	fmt.Println("Database migration completed successfully")
 
 	var count int64
 	if err := db.Model(&models.Server{}).Count(&count).Error; err != nil {
