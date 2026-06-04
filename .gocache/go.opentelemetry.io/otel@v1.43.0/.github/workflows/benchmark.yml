@@ -1,0 +1,52 @@
+name: Benchmark
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Declare default permissions as read only.
+permissions: read-all
+
+env:
+  DEFAULT_GO_VERSION: "~1.26.0"
+jobs:
+  # Related issue: https://github.com/CodSpeedHQ/codspeed-go/issues/51
+  sharding-benchmark:
+    name: Sharding benchmarks
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.sharding.outputs.shards }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: sharding
+        run: |
+          echo "shards=$(make print-sharded-benchmarks)" >> $GITHUB_OUTPUT
+
+  benchmark:
+    needs: sharding-benchmark
+    permissions:
+      contents: write # required for pushing to gh-pages branch
+    name: Benchmarks
+    runs-on: oracle-bare-metal-64cpu-1024gb-x86-64-ubuntu-24
+    strategy:
+      matrix:
+        shard: ${{ fromJson(needs.sharding-benchmark.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.DEFAULT_GO_VERSION }}
+          check-latest: true
+          cache-dependency-path: "**/go.sum"
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@d872884a306dd4853acf0f584f4b706cf0cc72a2 # v4.13.0
+        with:
+          mode: walltime
+          allow-empty: true
+          # CodSpeed overrides the default benchtime if we don't explicitly specify it.
+          # Having this would avoid running benchmark for more than 1 hour.
+          #
+          # The benchtime is adjusted to 500 ms to speed up the benchmark time.
+          # Per https://github.com/open-telemetry/community/issues/2331#issuecomment-2356403352
+          run: make benchmark/${{matrix.shard}} ARGS=-benchtime=500ms
